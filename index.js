@@ -6,6 +6,7 @@ helmet = require('helmet')
 bcrypt = require('bcrypt')
 jwt = require('jsonwebtoken')
 const bodyParser = require('body-parser');
+// const { get } = require('express/lib/response');
 const app = express()
 app.use(bodyParser.json())
 app.use(express.static('public'))
@@ -13,6 +14,7 @@ app.use(bodyParser.urlencoded({
     extended:true
 }))
 app.use(helmet())
+const start = Date.now();
 
 require('dotenv').config();
 
@@ -26,13 +28,68 @@ async function check(email){
     }).toArray()
     return result
 }
+
+async function getDeviceData(deviceId){
+    const result = await conn.client.db("dic").collection("deviceInfo")
+    .find({
+        'deviceId': deviceId
+    }).toArray();
+
+    return result;
+}
+
+async function getAIConditions(deviceId){
+    const result = await conn.client.db("dic").collection("AIConditions")
+    .find({
+        'deviceId': deviceId
+    }).toArray();
+
+    return result;
+}
+
+
 app.listen(process.env.PORT, ()=>{
     console.log(`Server running on ${process.env.HOST}:${process.env.PORT}`)
 })
 
-app.get('/', (req, res)=>{
+app.get('/', async (req, res)=>{
+    conn.listDbs()
+    // const data = await getCollections()
     res.send(`You are on port ${process.env.PORT}`)
     console.log(`Server running on ${process.env.HOST}:${process.env.PORT}`)
+})
+
+
+app.get('/getAlert', async (req,res)=>{
+    console.log(req.body.deviceId)
+    const data = await getDeviceData(req.body.deviceId);
+    if(data.length == 0){
+        res.status(400).send({'message': 'No record found of such device id'});
+        return;
+    }
+    if(data[0].data.temperature.upperThreshold < req.body.temp){
+        res.status(200).send(
+            {
+                "message": "Alert!! temperature crossed threshold value",
+                "deviceId": req.body.deviceId,
+                "Time": (Date.now() - start)/(1000*60)
+            })
+    }
+    else{
+        res.status(200).send({"message": "No Alerts"});
+    }
+})
+
+
+app.get('/aiconditions', async (req,res)=>{
+    const data = await getAIConditions(req.body.deviceId);
+    console.log(data)
+    if(data.length > 0){
+        res.status(200).send({"data": data})
+    }
+    else{
+        res.status(400).send({'message': 'No record found of such device id'})
+    }
 })
 
 
